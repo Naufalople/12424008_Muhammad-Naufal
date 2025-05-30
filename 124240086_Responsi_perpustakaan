@@ -1,0 +1,227 @@
+#include <iostream>
+#include <cstring>
+using namespace std;
+
+struct Buku {
+    int tahun;
+    char judul[100];
+    char pengarang[100];
+    Buku *kiri;
+    Buku *kanan;
+
+    Buku(int t, const char* j, const char* p) {
+        tahun = t;
+        strcpy(judul, j);
+        strcpy(pengarang, p);
+        kiri = kanan = nullptr;
+    }
+};
+
+struct UndoAction {
+    int type;
+    int tahun;
+    char judul[100];
+    char pengarang[100];
+    UndoAction* next;
+};
+
+UndoAction* undoStack = nullptr;
+
+void pushUndo(int type, int tahun, const char* judul, const char* pengarang) {
+    UndoAction* action = new UndoAction;
+    action->type = type;
+    action->tahun = tahun;
+    strcpy(action->judul, judul);
+    strcpy(action->pengarang, pengarang);
+    action->next = undoStack;
+    undoStack = action;
+}
+
+void sisip(Buku *&akar, int tahun, const char* judul, const char* pengarang) {
+    if (akar == nullptr) {
+        akar = new Buku(tahun, judul, pengarang);
+        pushUndo(1, tahun, judul, pengarang);
+        return;
+    }
+
+    if (strcmp(judul, akar->judul) < 0) {
+        sisip(akar->kiri, tahun, judul, pengarang);
+    } else {
+        sisip(akar->kanan, tahun, judul, pengarang);
+    }
+}
+
+void cetakDescendingJudul(Buku *akar) {
+    if (akar != nullptr) {
+        cetakDescendingJudul(akar->kanan);
+        cout << "Judul: " << akar->judul << ", Pengarang: " << akar->pengarang
+             << ", Tahun: " << akar->tahun << endl;
+        cetakDescendingJudul(akar->kiri);
+    }
+}
+
+Buku* cariBukuByJudul(Buku* akar, const char* judul) {
+    if (akar == nullptr) return nullptr;
+    
+    int cmp = strcmp(judul, akar->judul);
+    if (cmp == 0) {
+        return akar;
+    } else if (cmp < 0) {
+        return cariBukuByJudul(akar->kiri, judul);
+    } else {
+        return cariBukuByJudul(akar->kanan, judul);
+    }
+}
+
+Buku* hapusBukuByJudul(Buku *akar, const char* judul) {
+    if (akar == nullptr) return akar;
+
+    int cmp = strcmp(judul, akar->judul);
+    if (cmp < 0) {
+        akar->kiri = hapusBukuByJudul(akar->kiri, judul);
+    } else if (cmp > 0) {
+        akar->kanan = hapusBukuByJudul(akar->kanan, judul);
+    } else {
+        pushUndo(2, akar->tahun, akar->judul, akar->pengarang);
+        
+        if (akar->kiri == nullptr) {
+            Buku *temp = akar->kanan;
+            delete akar;
+            return temp;
+        } else if (akar->kanan == nullptr) {
+            Buku *temp = akar->kiri;
+            delete akar;
+            return temp;
+        }
+
+        Buku *temp = akar->kanan;
+        while (temp->kiri != nullptr) {
+            temp = temp->kiri;
+        }
+
+        akar->tahun = temp->tahun;
+        strcpy(akar->judul, temp->judul);
+        strcpy(akar->pengarang, temp->pengarang);
+
+        akar->kanan = hapusBukuByJudul(akar->kanan, temp->judul);
+    }
+    return akar;
+}
+
+void undo(Buku* &akar) {
+    if (undoStack == nullptr) {
+        cout << "Tidak ada aksi yang bisa di-undo" << endl;
+        return;
+    }
+
+    UndoAction* action = undoStack;
+    undoStack = undoStack->next;
+
+    if (action->type == 1) {
+        cout << "Membatalkan penambahan buku: " << action->judul << endl;
+        akar = hapusBukuByJudul(akar, action->judul);
+        if (undoStack != nullptr) {
+            UndoAction* temp = undoStack;
+            undoStack = undoStack->next;
+            delete temp;
+        }
+    } 
+    else if (action->type == 2) {
+        cout << "Mengembalikan buku yang dihapus: " << action->judul << endl;
+        sisip(akar, action->tahun, action->judul, action->pengarang);
+        if (undoStack != nullptr) {
+            UndoAction* temp = undoStack;
+            undoStack = undoStack->next;
+            delete temp;
+        }
+    }
+
+    delete action;
+}
+
+int main() {
+    Buku *akar = nullptr;
+    int jumlah, pilih;
+
+    do {
+        cout << "\nPilih menu:" << endl;
+        cout << "1. Input Buku" << endl;
+        cout << "2. Cari Buku berdasarkan Judul" << endl;
+        cout << "3. Cetak Descending berdasarkan Judul" << endl;
+        cout << "4. Hapus Buku berdasarkan Judul" << endl;
+        cout << "5. Undo" << endl;
+        cout << "6. Keluar" << endl;
+        cout << "Pilih menu nomor berapa: ";
+        cin >> pilih;
+        cin.ignore();
+
+        switch (pilih) {
+            case 1: {
+                cout << "Masukkan jumlah buku: ";
+                cin >> jumlah;
+                cin.ignore();
+                for (int i = 0; i < jumlah; i++) {
+                    int tahun;
+                    char judul[100];
+                    char pengarang[100];
+                    cout << endl << "Buku ke-" << (i + 1) << endl;
+                    cout << "Masukkan Tahun Terbit: ";
+                    cin >> tahun;
+                    cin.ignore();
+                    cout << "Masukkan Judul: ";
+                    cin.getline(judul, 100);
+                    cout << "Masukkan Pengarang: ";
+                    cin.getline(pengarang, 100);
+                    sisip(akar, tahun, judul, pengarang);
+                }
+                break;
+            }
+            case 2: {
+                char judulCari[100];
+                cout << "Masukkan Judul Buku yang ingin dicari: ";
+                cin.getline(judulCari, 100);
+                Buku* hasil = cariBukuByJudul(akar, judulCari);
+                if (hasil != nullptr) {
+                    cout << "Buku ditemukan:\n";
+                    cout << "Judul: " << hasil->judul << "\nPengarang: " << hasil->pengarang 
+                         << "\nTahun: " << hasil->tahun << endl;
+                } else {
+                    cout << "Buku dengan judul '" << judulCari << "' tidak ditemukan." << endl;
+                }
+                break;
+            }
+            case 3: {
+                cout << "\nData Buku (Descending Order by Judul):\n";
+                cetakDescendingJudul(akar);
+                break;
+            }
+            case 4: {
+                char judulHapus[100];
+                cout << "Masukkan Judul Buku yang ingin dihapus: ";
+                cin.getline(judulHapus, 100);
+                Buku* sebelum = cariBukuByJudul(akar, judulHapus);
+                if (sebelum != nullptr) {
+                    akar = hapusBukuByJudul(akar, judulHapus);
+                    cout << "Buku dengan judul '" << judulHapus << "' telah dihapus." << endl;
+                } else {
+                    cout << "Buku dengan judul '" << judulHapus << "' tidak ditemukan." << endl;
+                }
+                break;
+            }
+            case 5: {
+                undo(akar);
+                break;
+            }
+            case 6: {
+                cout << "Keluar dari Program" << endl;
+                break;
+            }
+            default: {
+                cout << "Angka tidak sesuai dengan menu." << endl;
+                break;
+            }
+        }
+    } while (pilih != 6);
+
+    return 0;
+}
